@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt needed for: $unformatted"
+            exit 1
+          fi
+
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" v2.13.1
+
+      - name: Lint
+        run: golangci-lint run
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Unit tests
+        run: go test ./internal/... -count=1
+
+  integration:
+    name: Integration tests + coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Testcontainers spins up a throwaway PostgreSQL; GitHub runners ship Docker.
+      - name: Integration tests with coverage
+        run: go test ./test/integration/ -count=1 -coverpkg=./... -coverprofile=coverage.out
+
+      # The minimum is a repository variable:
+      # Settings -> Secrets and variables -> Actions -> Variables -> COVERAGE_MINIMUM
+      # It falls back to 70 when unset.
+      - name: Enforce minimum coverage
+        env:
+          COVERAGE_MINIMUM: ${{ vars.COVERAGE_MINIMUM || '70' }}
+        run: |
+          total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}' | tr -d '%')
+          echo "Integration coverage: ${total}% (minimum: ${COVERAGE_MINIMUM}%)"
+          if ! awk -v t="$total" -v m="$COVERAGE_MINIMUM" 'BEGIN { exit !(t + 0 >= m + 0) }'; then
+            echo "::error::integration coverage ${total}% is below the minimum ${COVERAGE_MINIMUM}%"
+            exit 1
+          fi
+
+      - name: Upload coverage profile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-profile
+          path: coverage.out
+          if-no-files-found: ignore
+
+  vuln-scan:
+    name: Dependency & vuln scan
+    runs-on: ubuntu-latest
+    # Report-only while tuning: findings are visible in the logs (with
+    # annotations) but do not fail the run. Remove this line to make the scan
+    # a hard gate.
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          govulncheck ./...
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: 1
+          ignore-unfixed: true
