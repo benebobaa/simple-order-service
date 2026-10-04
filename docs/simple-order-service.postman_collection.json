@@ -1,0 +1,726 @@
+{
+  "info": {
+    "name": "Simple Order Service",
+    "description": "REST API collection for the Simple Order Service.\n\nFlow: run Auth > Register first (stores the JWT in {{token}}), then Products > Create Product (stores {{productId}}; its SKU is the KOPI-ARABIKA-1KG literal), then Orders > Create Order (stores {{orderId}}). List/Get/Cancel requests reuse those variables. Register and Login use the same account — the email is written directly in both request bodies (bene@example.com): run Register once before Login, and edit the email in those two bodies (e.g. add +timestamp) to run against a database that already has that account.\n\nResponse envelope: successes are {\"data\": ...} (list endpoints add a \"meta\" object); errors are {\"error\": {\"code\", \"message\", \"details\", \"request_id\"}}. The HTTP status code is authoritative, and every response echoes an X-Request-ID header. The scripts only capture the returned token/product/order identifiers into collection variables — there are no assertions, so re-runs never report failures (a 409 from Register for an already-registered email is expected). Saved response examples show exact payloads for success and error cases. Prices are integers in IDR.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "productId",
+      "value": ""
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/healthz",
+            "description": "Liveness probe. Returns 200 with the standard envelope: {\"data\":{\"status\":\"ok\"}}."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"data\":{\"status\":\"ok\"}}"
+            }
+          ]
+        },
+        {
+          "name": "Readiness Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/readyz",
+            "description": "Readiness probe: verifies the service's dependencies (PostgreSQL) are reachable, bounded at 2s. Returns 200 {\"data\":{\"status\":\"ready\"}} when ready, or 503 NOT_READY when a dependency is unavailable."
+          },
+          "response": [
+            {
+              "name": "200 Ready",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"data\":{\"status\":\"ready\"}}"
+            },
+            {
+              "name": "503 Not ready",
+              "status": "Service Unavailable",
+              "code": 503,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\":{\"code\":\"NOT_READY\",\"message\":\"service dependencies are unavailable\",\"request_id\":\"0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40\"}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.data && body.data.token) {",
+                  "  pm.collectionVariables.set('token', body.data.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bene\",\n  \"email\": \"bene@example.com\",\n  \"password\": \"s3cret-pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/auth/register",
+            "description": "Creates an account and returns a JWT (stored in {{token}}). Uses the literal email bene@example.com — run this once before Login. Re-running with an existing email returns 409 EMAIL_ALREADY_EXISTS, so edit the email here (and in Login) to register another account. Response: {\"data\":{\"token\",\"token_type\",\"expires_at\",\"user\"}}."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"data\":{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMTk5YTBmMi0xYzNiLTdhNGUtOGYyZC05YjFlNWM3YTNkMTAiLCJleHAiOjE3OTExNTIwMDB9.5Xh0dW1teS1zaWduYXR1cmU\",\"token_type\":\"Bearer\",\"expires_at\":\"2026-10-04T09:15:00Z\",\"user\":{\"id\":\"0199a0f2-1c3b-7a4e-8f2d-9b1e5c7a3d10\",\"name\":\"Bene\",\"email\":\"bene@example.com\",\"created_at\":\"2026-10-03T09:15:00Z\"}}}"
+            },
+            {
+              "name": "409 Email already exists",
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\":{\"code\":\"EMAIL_ALREADY_EXISTS\",\"message\":\"an account with this email already exists\",\"request_id\":\"0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40\"}}"
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.data && body.data.token) {",
+                  "  pm.collectionVariables.set('token', body.data.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"bene@example.com\",\n  \"password\": \"s3cret-pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/auth/login",
+            "description": "Signs in with bene@example.com / s3cret-pass and returns a JWT (stored in {{token}}). Requires an existing account — run Register first, otherwise this correctly returns 401 INVALID_CREDENTIALS. Wrong password and unknown email both return 401."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"data\":{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMTk5YTBmMi0xYzNiLTdhNGUtOGYyZC05YjFlNWM3YTNkMTAiLCJleHAiOjE3OTExNTIwMDB9.5Xh0dW1teS1zaWduYXR1cmU\",\"token_type\":\"Bearer\",\"expires_at\":\"2026-10-04T09:15:00Z\",\"user\":{\"id\":\"0199a0f2-1c3b-7a4e-8f2d-9b1e5c7a3d10\",\"name\":\"Bene\",\"email\":\"bene@example.com\",\"created_at\":\"2026-10-03T09:15:00Z\"}}}"
+            },
+            {
+              "name": "401 Invalid credentials",
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\":{\"code\":\"INVALID_CREDENTIALS\",\"message\":\"invalid email or password\",\"request_id\":\"0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40\"}}"
+            }
+          ]
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/auth/me",
+            "description": "Returns the authenticated user's profile. Response: {\"data\":{\"id\",\"name\",\"email\",\"created_at\"}}. Missing/invalid token returns 401 UNAUTHORIZED."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"data\":{\"id\":\"0199a0f2-1c3b-7a4e-8f2d-9b1e5c7a3d10\",\"name\":\"Bene\",\"email\":\"bene@example.com\",\"created_at\":\"2026-10-03T09:15:00Z\"}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "Create Product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.data && body.data.id) {",
+                  "  pm.collectionVariables.set('productId', body.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"KOPI-ARABIKA-1KG\",\n  \"name\": \"Kopi Arabika\",\n  \"description\": \"Single origin, 1kg\",\n  \"price\": 150000,\n  \"stock\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/products",
+            "description": "Creates a product (auth required). `sku` is the required, globally unique business key: it is canonicalized to uppercase and immutable after creation. Price and stock are integers in IDR; both may be 0 but not negative or missing. Response: {\"data\":{product}}; stores {{productId}}; Create Order references the KOPI-ARABIKA-1KG literal."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"data\":{\"id\":\"0199a0f2-2d4c-7b5f-9a3e-8c2f6d4b1a20\",\"sku\":\"KOPI-ARABIKA-1KG\",\"name\":\"Kopi Arabika\",\"description\":\"Single origin, 1kg\",\"price\":150000,\"stock\":10,\"created_at\":\"2026-10-03T09:20:00Z\",\"updated_at\":\"2026-10-03T09:20:00Z\"}}"
+            },
+            {
+              "name": "400 Validation error",
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\":{\"code\":\"VALIDATION_ERROR\",\"message\":\"request body validation failed\",\"details\":{\"price\":\"required\",\"stock\":\"required\"},\"request_id\":\"0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40\"}}"
+            },
+            {
+              "name": "409 SKU already exists",
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\":{\"code\":\"SKU_ALREADY_EXISTS\",\"message\":\"a product with this sku already exists\",\"request_id\":\"0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40\"}}"
+            }
+          ]
+        },
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/products?limit=20&offset=0",
+            "description": "Public paginated list. Response: {\"data\":[...],\"meta\":{\"total\",\"limit\",\"offset\"}}. limit defaults to 20, caps at 100."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"data\":[{\"id\":\"0199a0f2-2d4c-7b5f-9a3e-8c2f6d4b1a20\",\"sku\":\"KOPI-ARABIKA-1KG\",\"name\":\"Kopi Arabika\",\"description\":\"Single origin, 1kg\",\"price\":150000,\"stock\":10,\"created_at\":\"2026-10-03T09:20:00Z\",\"updated_at\":\"2026-10-03T09:20:00Z\"}],\"meta\":{\"total\":1,\"limit\":20,\"offset\":0}}"
+            }
+          ]
+        },
+        {
+          "name": "Get Product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/products/{{productId}}",
+            "description": "Public. Response: {\"data\":{product}}. Unknown IDs return 404 PRODUCT_NOT_FOUND, malformed UUIDs 400 VALIDATION_ERROR."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"data\":{\"id\":\"0199a0f2-2d4c-7b5f-9a3e-8c2f6d4b1a20\",\"sku\":\"KOPI-ARABIKA-1KG\",\"name\":\"Kopi Arabika\",\"description\":\"Single origin, 1kg\",\"price\":150000,\"stock\":10,\"created_at\":\"2026-10-03T09:20:00Z\",\"updated_at\":\"2026-10-03T09:20:00Z\"}}"
+            },
+            {
+              "name": "404 Product not found",
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\":{\"code\":\"PRODUCT_NOT_FOUND\",\"message\":\"product not found\",\"request_id\":\"0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40\"}}"
+            }
+          ]
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Kopi Arabika Premium\",\n  \"description\": \"Single origin, 1kg, freshly roasted\",\n  \"price\": 165000,\n  \"stock\": 12\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/products/{{productId}}",
+            "description": "Full replace of the product's mutable fields (auth required). The SKU is immutable and intentionally not part of this payload. Response: {\"data\":{product}}; unknown IDs return 404."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"data\":{\"id\":\"0199a0f2-2d4c-7b5f-9a3e-8c2f6d4b1a20\",\"sku\":\"KOPI-ARABIKA-1KG\",\"name\":\"Kopi Arabika Premium\",\"description\":\"Single origin, 1kg, freshly roasted\",\"price\":165000,\"stock\":12,\"created_at\":\"2026-10-03T09:20:00Z\",\"updated_at\":\"2026-10-03T09:22:00Z\"}}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Create Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.data && body.data.id) {",
+                  "  pm.collectionVariables.set('orderId', body.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"sku\": \"KOPI-ARABIKA-1KG\",\n      \"quantity\": 2\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/orders",
+            "description": "Creates an order for the authenticated user and reserves stock immediately. Items reference products by their canonical SKU (here the KOPI-ARABIKA-1KG literal), resolved under lock and snapshotted onto the order line. Response: {\"data\":{order with items}}. If any item lacks stock the whole order fails with 409 INSUFFICIENT_STOCK and no stock is reserved. Stores {{orderId}}."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"data\":{\"id\":\"0199a0f2-3e5d-7c6a-8b4f-7d3e9c5a2b30\",\"user_id\":\"0199a0f2-1c3b-7a4e-8f2d-9b1e5c7a3d10\",\"status\":\"pending\",\"total_price\":300000,\"items\":[{\"id\":\"0199a0f2-5a7b-7e6c-9d2f-5a8b1c3d6e50\",\"product_id\":\"0199a0f2-2d4c-7b5f-9a3e-8c2f6d4b1a20\",\"sku\":\"KOPI-ARABIKA-1KG\",\"product_name\":\"Kopi Arabika\",\"quantity\":2,\"unit_price\":150000,\"subtotal\":300000}],\"created_at\":\"2026-10-03T09:25:00Z\",\"updated_at\":\"2026-10-03T09:25:00Z\"}}"
+            },
+            {
+              "name": "409 Insufficient stock",
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\":{\"code\":\"INSUFFICIENT_STOCK\",\"message\":\"insufficient stock for product \\\"Kopi Arabika\\\"\",\"details\":{\"available\":1,\"items\":\"items[0]\",\"product_id\":\"0199a0f2-2d4c-7b5f-9a3e-8c2f6d4b1a20\",\"sku\":\"KOPI-ARABIKA-1KG\",\"product_name\":\"Kopi Arabika\",\"requested\":2},\"request_id\":\"0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40\"}}"
+            }
+          ]
+        },
+        {
+          "name": "List Orders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/orders?limit=20&offset=0&status=pending",
+            "description": "Lists the caller's own orders only. Optional status filter: pending or cancelled. Response: {\"data\":[order summaries],\"meta\":{...}}. An invalid status returns 400."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"data\":[{\"id\":\"0199a0f2-3e5d-7c6a-8b4f-7d3e9c5a2b30\",\"user_id\":\"0199a0f2-1c3b-7a4e-8f2d-9b1e5c7a3d10\",\"status\":\"pending\",\"total_price\":300000,\"created_at\":\"2026-10-03T09:25:00Z\",\"updated_at\":\"2026-10-03T09:25:00Z\"}],\"meta\":{\"total\":1,\"limit\":20,\"offset\":0}}"
+            }
+          ]
+        },
+        {
+          "name": "Get Order",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/orders/{{orderId}}",
+            "description": "Order detail with items (SKU, product name, price snapshots) and totals. Response: {\"data\":{order with items}}. Other users' orders return 404 ORDER_NOT_FOUND."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"data\":{\"id\":\"0199a0f2-3e5d-7c6a-8b4f-7d3e9c5a2b30\",\"user_id\":\"0199a0f2-1c3b-7a4e-8f2d-9b1e5c7a3d10\",\"status\":\"pending\",\"total_price\":300000,\"items\":[{\"id\":\"0199a0f2-5a7b-7e6c-9d2f-5a8b1c3d6e50\",\"product_id\":\"0199a0f2-2d4c-7b5f-9a3e-8c2f6d4b1a20\",\"sku\":\"KOPI-ARABIKA-1KG\",\"product_name\":\"Kopi Arabika\",\"quantity\":2,\"unit_price\":150000,\"subtotal\":300000}],\"created_at\":\"2026-10-03T09:25:00Z\",\"updated_at\":\"2026-10-03T09:25:00Z\"}}"
+            }
+          ]
+        },
+        {
+          "name": "Cancel Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/orders/{{orderId}}/cancel",
+            "description": "Cancels the order and returns its reserved stock. Response: {\"data\":{cancelled order}}. A second cancel of an already-cancelled order is rejected with 409 ORDER_ALREADY_CANCELLED; stock is never restored twice."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"data\":{\"id\":\"0199a0f2-3e5d-7c6a-8b4f-7d3e9c5a2b30\",\"user_id\":\"0199a0f2-1c3b-7a4e-8f2d-9b1e5c7a3d10\",\"status\":\"cancelled\",\"total_price\":300000,\"items\":[{\"id\":\"0199a0f2-5a7b-7e6c-9d2f-5a8b1c3d6e50\",\"product_id\":\"0199a0f2-2d4c-7b5f-9a3e-8c2f6d4b1a20\",\"sku\":\"KOPI-ARABIKA-1KG\",\"product_name\":\"Kopi Arabika\",\"quantity\":2,\"unit_price\":150000,\"subtotal\":300000}],\"created_at\":\"2026-10-03T09:25:00Z\",\"updated_at\":\"2026-10-03T09:30:00Z\",\"cancelled_at\":\"2026-10-03T09:30:00Z\"}}"
+            },
+            {
+              "name": "409 Already cancelled",
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-ID",
+                  "value": "0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\":{\"code\":\"ORDER_ALREADY_CANCELLED\",\"message\":\"order is already cancelled\",\"request_id\":\"0199a0f2-4f6e-7d5b-8c1a-6b2d7e4f9a40\"}}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
