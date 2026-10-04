@@ -66,6 +66,13 @@ jobs:
           BASE_URL: ${{ vars.SANITY_BASE_URL || 'https://simple-order-service.kubeletto.app' }}
         run: k6 run test/sanity/sanity.js
 
+      # Parallel-request probe for race invariants (last item, cancel-once)
+      # against the deployed environment: connection pool, replicas.
+      - name: Post-deploy concurrency probe
+        env:
+          BASE_URL: ${{ vars.SANITY_BASE_URL || 'https://simple-order-service.kubeletto.app' }}
+        run: k6 run test/sanity/concurrency.js
+
       - name: Rollback hint
         if: failure()
         run: |
