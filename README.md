@@ -142,10 +142,10 @@ contracts (`400`, `401`, `404`, `409`). It needs no credentials: every run
 registers its own users and creates its own products.
 
 `concurrency.js` probes race invariants with parallel requests — five users
-racing for the last unit and five parallel cancels of one order — failing on
-any outcome a correct implementation cannot produce. The deterministic race
-proofs live in `test/integration/`; the probe validates the deployed
-environment.
+racing for the last unit, five parallel cancels of one order, and a mixed
+batch of creates and cancels on one product — failing on any outcome a
+correct implementation cannot produce. The deterministic race proofs live in
+`test/integration/`; the probe validates the deployed environment.
 
 ```bash
 make sanity                                    # whole suite against staging

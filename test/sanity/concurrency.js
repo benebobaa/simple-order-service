@@ -21,6 +21,7 @@ const RACERS = 5;
 export default function concurrency() {
   raceForLastItem();
   raceToCancelOnce();
+  raceMixedCreateCancel();
 }
 
 // raceForLastItem: RACERS users order the same product that has a single unit
@@ -87,4 +88,47 @@ function raceToCancelOnce() {
   const after = request('GET', `/v1/products/${product.id}`);
   expectStatus(after, 200, 'cancel race: product still readable');
   check(after, { 'cancel race: stock is restored exactly once': (r) => r.json('data.stock') === 5 });
+}
+
+// raceMixedCreateCancel: buyers create orders while owners cancel theirs, all
+// in parallel on the same product — stock decreases and increases at once.
+// With ample stock every request must succeed in any interleaving, and the
+// final stock must match the exact arithmetic of both directions.
+function raceMixedCreateCancel() {
+  const buyers = [registerUser(), registerUser()];
+  const owners = [registerUser(), registerUser()];
+  const product = createProduct(buyers[0].token, { stock: 10 });
+
+  // Seed two pending orders so there is something to cancel.
+  const seeded = owners.map((owner) => {
+    const res = request('POST', '/v1/orders', { items: [{ sku: product.sku, quantity: 1 }] }, owner.token);
+    expectStatus(res, 201, 'mixed race: seeded order created');
+    return res.json('data.id');
+  });
+
+  const responses = http.batch([
+    ...buyers.map((buyer) =>
+      batchRequest('POST', '/v1/orders', { items: [{ sku: product.sku, quantity: 1 }] }, buyer.token),
+    ),
+    ...seeded.map((orderID, i) =>
+      batchRequest('POST', `/v1/orders/${orderID}/cancel`, undefined, owners[i].token),
+    ),
+  ]);
+
+  const creates = responses.slice(0, buyers.length);
+  const cancels = responses.slice(buyers.length);
+
+  check(null, {
+    'mixed race: every create succeeds': () => creates.every((res) => res.status === 201),
+    'mixed race: every cancel succeeds': () => cancels.every((res) => res.status === 200),
+    'mixed race: creates return pending orders': () => creates.every((res) => res.json('data.status') === 'pending'),
+    'mixed race: cancels return cancelled orders': () =>
+      cancels.every((res) => res.json('data.status') === 'cancelled'),
+    'mixed race: no server errors during the race': () => responses.every((res) => res.status < 500),
+  });
+
+  const after = request('GET', `/v1/products/${product.id}`);
+  expectStatus(after, 200, 'mixed race: product still readable');
+  // 10 initial − 2 seeded − 2 new creates + 2 restores = 8, whatever the order.
+  check(after, { 'mixed race: stock matches the exact arithmetic': (r) => r.json('data.stock') === 8 });
 }
