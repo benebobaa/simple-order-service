@@ -133,6 +133,27 @@ Coverage spans auth, products, orders and the stock rules including races;
 `make coverage` mirrors CI and currently measures ~72% (integration-only,
 `-coverpkg=./...`).
 
+### Sanity checks (k6)
+
+`test/sanity/` is a post-deploy suite that walks a deployed environment end
+to end over HTTP. Files are split per resource — `health.js`, `auth.js`,
+`products.js`, `orders.js` — and cover the happy path plus the main error
+contracts (`400`, `401`, `404`, `409`). It needs no credentials: every run
+registers its own users and creates its own products.
+
+`concurrency.js` probes race invariants with parallel requests — five users
+racing for the last unit, five parallel cancels of one order, and a mixed
+batch of creates and cancels on one product — failing on any outcome a
+correct implementation cannot produce. The deterministic race proofs live in
+`test/integration/`; the probe validates the deployed environment.
+
+```bash
+make sanity                                    # whole suite against staging
+make sanity-race                               # concurrency probe
+make sanity SANITY_URL=http://localhost:8080   # any environment
+k6 run test/sanity/orders.js                   # a single area, standalone
+```
+
 ## Postman collection
 
 Import [`docs/simple-order-service.postman_collection.json`](docs/simple-order-service.postman_collection.json)
@@ -146,3 +167,12 @@ Import [`docs/simple-order-service.postman_collection.json`](docs/simple-order-s
 - **Integration + coverage** — testcontainers suite; fails below the
   repository variable `COVERAGE_MINIMUM` (default `70`), profile uploaded
 - **Vulnerability scan** — `govulncheck` + Trivy (HIGH/CRITICAL); report-only for now
+
+## Deploy
+
+Pushing a `v*` tag runs `.github/workflows/deploy.yml`: the `Dockerfile` image
+is built for `linux/amd64`, pushed to `ghcr.io/benebobaa/simple-order-service`
+and deployed with `kubeletto deploy … --wait`. The k6 sanity suite and
+concurrency probe then run against the live URL; a failed check fails the
+workflow and flags the release for rollback with
+`kubeletto rollback simple-order-service`.
