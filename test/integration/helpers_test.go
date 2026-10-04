@@ -161,3 +161,11 @@ func countRows(t *testing.T, table string) int {
 	}
 	return count
 }
+
+func item(sku string, quantity int32) map[string]any {
+	return map[string]any{"sku": sku, "quantity": quantity}
+}
+
+func orderPayload(items ...map[string]any) map[string]any {
+	return map[string]any{"items": items}
+}

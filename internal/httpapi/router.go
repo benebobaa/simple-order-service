@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/benebobaa/simple-order-service/internal/auth"
+	"github.com/benebobaa/simple-order-service/internal/order"
 	"github.com/benebobaa/simple-order-service/internal/product"
 	"github.com/benebobaa/simple-order-service/internal/web"
 )
@@ -17,6 +18,7 @@ type Deps struct {
 	Logger   *slog.Logger
 	Auth     auth.RoutesDeps
 	Products product.RoutesDeps
+	Orders   order.RoutesDeps
 }
 
 // NewRouter builds the gin engine, applies global middleware and mounts each
@@ -38,6 +40,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	v1 := r.Group("/v1")
 	auth.RegisterRoutes(v1, deps.Auth)
 	product.RegisterRoutes(v1, deps.Products)
+	order.RegisterRoutes(v1, deps.Orders)
 
 	return r
 }
