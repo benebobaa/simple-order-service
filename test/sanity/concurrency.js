@@ -16,9 +16,7 @@ export const options = {
   thresholds: { checks: ['rate==1'] },
 };
 
-// Race width: how many requests each parallel batch fires. Raise it for more
-// pressure, e.g. k6 run -e RACERS=10 test/sanity/concurrency.js
-const RACERS = Number(__ENV.RACERS) || 5;
+const RACERS = 5;
 
 export default function concurrency() {
   raceForLastItem();
