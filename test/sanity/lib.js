@@ -6,15 +6,25 @@ import { check } from 'k6';
 // Defaults to the staging deployment; override with --env BASE_URL=...
 export const BASE_URL = (__ENV.BASE_URL || 'https://simple-order-service.kubeletto.app').replace(/\/+$/, '');
 
-// request performs one JSON call, attaching the bearer token when given.
-export function request(method, path, body, token) {
+// batchRequest builds a request descriptor for http.batch, so several calls
+// can be fired in parallel (used by the concurrency probe).
+export function batchRequest(method, path, body, token) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-  return http.request(method, `${BASE_URL}${path}`, body === undefined ? null : JSON.stringify(body), {
-    headers,
-  });
+  return {
+    method,
+    url: `${BASE_URL}${path}`,
+    body: body === undefined ? null : JSON.stringify(body),
+    params: { headers },
+  };
+}
+
+// request performs one JSON call, attaching the bearer token when given.
+export function request(method, path, body, token) {
+  const spec = batchRequest(method, path, body, token);
+  return http.request(spec.method, spec.url, spec.body, spec.params);
 }
 
 // expectStatus asserts the documented HTTP status for an endpoint.

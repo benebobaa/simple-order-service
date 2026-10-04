@@ -3,7 +3,7 @@ DATABASE_URL ?= postgres://postgres:postgres@localhost:5432/orders?sslmode=disab
 SANITY_URL  ?= https://simple-order-service.kubeletto.app
 
 .PHONY: run build fmt fmt-check vet sqlc migrate-up migrate-down migrate-status migrate-reset \
-        test test-unit test-integration coverage sanity lint check compose-up compose-down
+        test test-unit test-integration coverage sanity sanity-race lint check compose-up compose-down
 
 ## Development
 
@@ -60,6 +60,10 @@ coverage:
 # sanity runs the post-deploy k6 suite against a deployed environment.
 sanity:
 	k6 run --env BASE_URL="$(SANITY_URL)" test/sanity/sanity.js
+
+# sanity-race probes concurrency invariants against a deployed environment.
+sanity-race:
+	k6 run --env BASE_URL="$(SANITY_URL)" test/sanity/concurrency.js
 
 ## Quality
 
