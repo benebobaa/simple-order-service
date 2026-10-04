@@ -55,3 +55,19 @@ jobs:
           kubeletto deploy simple-order-service \
             --image "ghcr.io/${{ github.repository }}:${{ github.ref_name }}" \
             --wait --timeout 300 --non-interactive
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1
+
+      # Functional gate: one pass over the public API of the deployed service.
+      # A failed check fails the workflow so the release can be rolled back.
+      - name: Post-deploy sanity checks
+        env:
+          BASE_URL: ${{ vars.SANITY_BASE_URL || 'https://simple-order-service.kubeletto.app' }}
+        run: k6 run test/sanity/sanity.js
+
+      - name: Rollback hint
+        if: failure()
+        run: |
+          echo '### ⚠️ Deploy or sanity checks failed' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Roll back with: kubeletto rollback simple-order-service' >> "$GITHUB_STEP_SUMMARY"
