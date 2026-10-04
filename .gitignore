@@ -1,0 +1,21 @@
+# Binaries
+bin/
+*.exe
+*.test
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Test / coverage artifacts
+coverage.out
+coverage.html
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Agent/session tooling state
+.remember/
