@@ -133,6 +133,18 @@ Coverage spans auth, products, orders and the stock rules including races;
 `make coverage` mirrors CI and currently measures ~72% (integration-only,
 `-coverpkg=./...`).
 
+### Sanity checks (k6)
+
+`test/sanity/` is a post-deploy suite that walks a deployed environment end
+to end over HTTP: health probes, auth, product CRUD and the full order
+lifecycle (including the double-cancel `409`). It needs no credentials — each
+run registers its own user and creates its own product.
+
+```bash
+make sanity                                    # staging
+make sanity SANITY_URL=http://localhost:8080   # any environment
+```
+
 ## Postman collection
 
 Import [`docs/simple-order-service.postman_collection.json`](docs/simple-order-service.postman_collection.json)
@@ -146,3 +158,11 @@ Import [`docs/simple-order-service.postman_collection.json`](docs/simple-order-s
 - **Integration + coverage** — testcontainers suite; fails below the
   repository variable `COVERAGE_MINIMUM` (default `70`), profile uploaded
 - **Vulnerability scan** — `govulncheck` + Trivy (HIGH/CRITICAL); report-only for now
+
+## Deploy
+
+Pushing a `v*` tag runs `.github/workflows/deploy.yml`: the `Dockerfile` image
+is built for `linux/amd64`, pushed to `ghcr.io/benebobaa/simple-order-service`
+and deployed with `kubeletto deploy … --wait`. The k6 sanity suite then runs
+against the live URL; a failed check fails the workflow and flags the release
+for rollback with `kubeletto rollback simple-order-service`.
