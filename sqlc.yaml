@@ -1,0 +1,33 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "db/queries"
+    schema: "db/migrations"
+    gen:
+      go:
+        package: "sqlc"
+        out: "internal/store/sqlc"
+        sql_package: "pgx/v5"
+        emit_empty_slices: true
+        emit_interface: false
+        overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/google/uuid"
+              package: "uuid"
+              type: "UUID"
+          # Nullable text maps to *string; currently only used by the optional
+          # status filter parameter of the order list/count queries.
+          - db_type: "text"
+            nullable: true
+            go_type:
+              type: "string"
+              pointer: true
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+          - db_type: "timestamptz"
+            nullable: true
+            go_type:
+              import: "time"
+              type: "Time"
+              pointer: true
