@@ -10,6 +10,7 @@ import (
 	"github.com/benebobaa/simple-order-service/internal/auth"
 	"github.com/benebobaa/simple-order-service/internal/config"
 	"github.com/benebobaa/simple-order-service/internal/httpapi"
+	"github.com/benebobaa/simple-order-service/internal/product"
 	"github.com/benebobaa/simple-order-service/internal/store"
 )
 
@@ -23,6 +24,10 @@ func New(pool *pgxpool.Pool, cfg *config.Config, logger *slog.Logger) *gin.Engin
 		Logger: logger,
 		Auth: auth.RoutesDeps{
 			Service:     auth.NewService(st, issuer),
+			TokenIssuer: issuer,
+		},
+		Products: product.RoutesDeps{
+			Service:     product.NewService(st),
 			TokenIssuer: issuer,
 		},
 	})

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/benebobaa/simple-order-service/internal/auth"
+	"github.com/benebobaa/simple-order-service/internal/product"
 )
 
 // baseSuite truncates all tables before each test so tests are independent.
@@ -112,4 +113,51 @@ func registerUserWithEmail(t *testing.T, email string) auth.Response {
 		t.Fatalf("register user: status %d body %s", rec.Code, rec.Body.String())
 	}
 	return decodeData[auth.Response](t, rec)
+}
+
+// createProduct creates a product through the API and returns it. When the
+// body carries no SKU, a unique one is generated: most tests only care about
+// the product identity, not the business key.
+func createProduct(t *testing.T, token string, body map[string]any) product.Response {
+	t.Helper()
+	if _, ok := body["sku"]; !ok {
+		body["sku"] = "SKU-" + uuid.NewString()[:8]
+	}
+	rec := doJSON("POST", "/v1/products", body, token)
+	if rec.Code != 201 {
+		t.Fatalf("create product: status %d body %s", rec.Code, rec.Body.String())
+	}
+	return decodeData[product.Response](t, rec)
+}
+
+// listEnvelope mirrors the paginated list response shape.
+type listEnvelope[T any] struct {
+	Data []T `json:"data"`
+	Meta struct {
+		Total  int64 `json:"total"`
+		Limit  int32 `json:"limit"`
+		Offset int32 `json:"offset"`
+	} `json:"meta"`
+}
+
+// getStock reads the current stock of a product straight from the database.
+func getStock(t *testing.T, productID uuid.UUID) int32 {
+	t.Helper()
+	var stock int32
+	err := testPool.QueryRow(context.Background(), "SELECT stock FROM products WHERE id = $1", productID).Scan(&stock)
+	if err != nil {
+		t.Fatalf("query stock for product %s: %v", productID, err)
+	}
+	return stock
+}
+
+// countRows counts rows in one of the known application tables.
+func countRows(t *testing.T, table string) int {
+	t.Helper()
+	var count int
+	err := testPool.QueryRow(context.Background(), "SELECT count(*) FROM "+table).Scan(&count)
+	if err != nil {
+		t.Fatalf("count rows in %s: %v", table, err)
+	}
+	return count
 }
