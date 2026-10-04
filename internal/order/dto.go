@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/benebobaa/simple-order-service/internal/store/sqlc"
 )
 
 type createOrderRequest struct {
@@ -40,6 +42,29 @@ type Response struct {
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	CancelledAt *time.Time     `json:"cancelled_at,omitempty"`
+}
+
+// SummaryResponse is the list representation of an order, without items.
+type SummaryResponse struct {
+	ID          uuid.UUID  `json:"id"`
+	UserID      uuid.UUID  `json:"user_id"`
+	Status      string     `json:"status"`
+	TotalPrice  int64      `json:"total_price"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	CancelledAt *time.Time `json:"cancelled_at,omitempty"`
+}
+
+func newSummaryResponse(order sqlc.Order) SummaryResponse {
+	return SummaryResponse{
+		ID:          order.ID,
+		UserID:      order.UserID,
+		Status:      order.Status,
+		TotalPrice:  order.TotalPrice,
+		CreatedAt:   order.CreatedAt,
+		UpdatedAt:   order.UpdatedAt,
+		CancelledAt: order.CancelledAt,
+	}
 }
 
 func newResponse(detail *Detail) Response {

@@ -4,10 +4,12 @@ package order
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/benebobaa/simple-order-service/internal/apperr"
 	"github.com/benebobaa/simple-order-service/internal/store"
@@ -162,6 +164,71 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, items []ItemInpu
 	}
 
 	return detail, nil
+}
+
+// Get returns one order with its items, scoped to the owning user.
+func (s *Service) Get(ctx context.Context, userID, orderID uuid.UUID) (*Detail, error) {
+	return s.getDetail(ctx, userID, orderID)
+}
+
+// List returns a page of the user's orders plus the total count. The optional
+// status filter accepts "pending" or "cancelled".
+func (s *Service) List(ctx context.Context, userID uuid.UUID, status *string, limit, offset int32) ([]sqlc.Order, int64, error) {
+	normalizedStatus, err := normalizeStatus(status)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	orders, err := s.store.Queries().ListOrdersByUser(ctx, sqlc.ListOrdersByUserParams{
+		UserID:    userID,
+		Status:    normalizedStatus,
+		RowLimit:  limit,
+		RowOffset: offset,
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("list orders: %w", err)
+	}
+
+	total, err := s.store.Queries().CountOrdersByUser(ctx, sqlc.CountOrdersByUserParams{
+		UserID: userID,
+		Status: normalizedStatus,
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("count orders: %w", err)
+	}
+	return orders, total, nil
+}
+
+func normalizeStatus(status *string) (*string, error) {
+	if status == nil || strings.TrimSpace(*status) == "" {
+		return nil, nil
+	}
+
+	normalized := strings.ToLower(strings.TrimSpace(*status))
+	if normalized != "pending" && normalized != "cancelled" {
+		return nil, apperr.Validation("invalid status filter", map[string]any{"status": "in=pending cancelled"})
+	}
+	return &normalized, nil
+}
+
+func (s *Service) getDetail(ctx context.Context, userID, orderID uuid.UUID) (*Detail, error) {
+	order, err := s.store.Queries().GetOrderByIDForUser(ctx, sqlc.GetOrderByIDForUserParams{
+		ID:     orderID,
+		UserID: userID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperr.NotFound(apperr.CodeOrderNotFound, "order not found")
+		}
+		return nil, fmt.Errorf("get order: %w", err)
+	}
+
+	items, err := s.store.Queries().ListOrderItemsWithProductNameByOrderIDs(ctx, []uuid.UUID{orderID})
+	if err != nil {
+		return nil, fmt.Errorf("list order items: %w", err)
+	}
+
+	return &Detail{Order: order, Items: items}, nil
 }
 
 // checkedSubtotal multiplies a non-negative price by a positive quantity and

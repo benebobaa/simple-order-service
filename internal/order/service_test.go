@@ -60,3 +60,47 @@ func TestNormalizeItems(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeStatus(t *testing.T) {
+	pending := "pending"
+	cancelled := "cancelled"
+
+	t.Run("nil passes through", func(t *testing.T) {
+		status, err := normalizeStatus(nil)
+		assert.NoError(t, err)
+		assert.Nil(t, status)
+	})
+
+	t.Run("blank becomes nil", func(t *testing.T) {
+		blank := "  "
+		status, err := normalizeStatus(&blank)
+		assert.NoError(t, err)
+		assert.Nil(t, status)
+	})
+
+	t.Run("value is trimmed and lowercased", func(t *testing.T) {
+		raw := "  CANCELLED "
+		status, err := normalizeStatus(&raw)
+		require.NoError(t, err)
+		require.NotNil(t, status)
+		assert.Equal(t, cancelled, *status)
+	})
+
+	t.Run("known statuses are accepted", func(t *testing.T) {
+		for _, input := range []*string{&pending, &cancelled} {
+			status, err := normalizeStatus(input)
+			require.NoError(t, err)
+			require.NotNil(t, status)
+			assert.Equal(t, *input, *status)
+		}
+	})
+
+	t.Run("unknown status is rejected", func(t *testing.T) {
+		unknown := "shipped"
+		_, err := normalizeStatus(&unknown)
+
+		var appErr *apperr.Error
+		require.ErrorAs(t, err, &appErr)
+		assert.Equal(t, apperr.CodeValidation, appErr.Code)
+	})
+}

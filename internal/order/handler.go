@@ -36,3 +36,42 @@ func (h *handler) create(c *gin.Context) {
 
 	web.Respond(c, http.StatusCreated, newResponse(detail))
 }
+
+func (h *handler) get(c *gin.Context) {
+	id, ok := web.ParseUUIDParam(c, "id")
+	if !ok {
+		return
+	}
+
+	detail, err := h.service.Get(c.Request.Context(), auth.UserIDFromContext(c), id)
+	if err != nil {
+		web.AbortWithError(c, err)
+		return
+	}
+	web.Respond(c, http.StatusOK, newResponse(detail))
+}
+
+func (h *handler) list(c *gin.Context) {
+	limit, offset := web.PaginationFromQuery(c)
+
+	var status *string
+	if raw, exists := c.GetQuery("status"); exists {
+		status = &raw
+	}
+
+	orders, total, err := h.service.List(c.Request.Context(), auth.UserIDFromContext(c), status, limit, offset)
+	if err != nil {
+		web.AbortWithError(c, err)
+		return
+	}
+
+	items := make([]SummaryResponse, 0, len(orders))
+	for _, order := range orders {
+		items = append(items, newSummaryResponse(order))
+	}
+
+	c.JSON(http.StatusOK, web.ListResponse[SummaryResponse]{
+		Data: items,
+		Meta: web.ListMeta{Total: total, Limit: limit, Offset: offset},
+	})
+}
