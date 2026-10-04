@@ -17,13 +17,51 @@ export function request(method, path, body, token) {
   });
 }
 
-// expectStatus asserts the documented status code for an endpoint.
+// expectStatus asserts the documented HTTP status for an endpoint.
 export function expectStatus(res, status, name) {
   return check(res, { [`${name}: ${status}`]: (r) => r.status === status });
 }
 
-// uniqueSuffix keeps runs independent: each execution registers a fresh user
-// and creates a fresh product (the API has no delete endpoints).
+// expectJson asserts a value inside the response body (GJSON path).
+export function expectJson(res, name, path, want) {
+  return check(res, { [name]: (r) => r.json(path) === want });
+}
+
+// expectRequestID asserts the response carries the tracing header.
+export function expectRequestID(res, name) {
+  return check(res, {
+    [name]: (r) => Object.keys(r.headers).some((key) => key.toLowerCase() === 'x-request-id'),
+  });
+}
+
+// uniqueSuffix keeps runs independent: each execution registers fresh users
+// and creates fresh products (the API has no delete endpoints).
 export function uniqueSuffix() {
   return `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+}
+
+// registerUser registers a fresh user and returns its credentials and token.
+export function registerUser() {
+  const email = `sanity+${uniqueSuffix()}@example.com`;
+  const password = 'sanity-pass-123';
+  const res = request('POST', '/v1/auth/register', { name: 'Sanity Check', email, password });
+  expectStatus(res, 201, 'setup: POST /v1/auth/register');
+  const token = res.json('data.token');
+  check(res, { 'setup: register returns a token': () => Boolean(token) });
+  return { email, password, token };
+}
+
+// createProduct creates a fresh product and returns its response body.
+export function createProduct(token, overrides = {}) {
+  const body = {
+    sku: `SANITY-${uniqueSuffix()}`,
+    name: 'Sanity Product',
+    description: 'created by the post-deploy sanity suite',
+    price: 15000,
+    stock: 5,
+    ...overrides,
+  };
+  const res = request('POST', '/v1/products', body, token);
+  expectStatus(res, 201, 'setup: POST /v1/products');
+  return res.json('data');
 }
