@@ -141,8 +141,15 @@ to end over HTTP. Files are split per resource — `health.js`, `auth.js`,
 contracts (`400`, `401`, `404`, `409`). It needs no credentials: every run
 registers its own users and creates its own products.
 
+`concurrency.js` probes race invariants with parallel requests — five users
+racing for the last unit and five parallel cancels of one order — failing on
+any outcome a correct implementation cannot produce. The deterministic race
+proofs live in `test/integration/`; the probe validates the deployed
+environment.
+
 ```bash
 make sanity                                    # whole suite against staging
+make sanity-race                               # concurrency probe
 make sanity SANITY_URL=http://localhost:8080   # any environment
 k6 run test/sanity/orders.js                   # a single area, standalone
 ```
@@ -165,6 +172,7 @@ Import [`docs/simple-order-service.postman_collection.json`](docs/simple-order-s
 
 Pushing a `v*` tag runs `.github/workflows/deploy.yml`: the `Dockerfile` image
 is built for `linux/amd64`, pushed to `ghcr.io/benebobaa/simple-order-service`
-and deployed with `kubeletto deploy … --wait`. The k6 sanity suite then runs
-against the live URL; a failed check fails the workflow and flags the release
-for rollback with `kubeletto rollback simple-order-service`.
+and deployed with `kubeletto deploy … --wait`. The k6 sanity suite and
+concurrency probe then run against the live URL; a failed check fails the
+workflow and flags the release for rollback with
+`kubeletto rollback simple-order-service`.
