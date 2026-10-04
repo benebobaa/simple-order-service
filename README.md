@@ -136,13 +136,15 @@ Coverage spans auth, products, orders and the stock rules including races;
 ### Sanity checks (k6)
 
 `test/sanity/` is a post-deploy suite that walks a deployed environment end
-to end over HTTP: health probes, auth, product CRUD and the full order
-lifecycle (including the double-cancel `409`). It needs no credentials — each
-run registers its own user and creates its own product.
+to end over HTTP. Files are split per resource — `health.js`, `auth.js`,
+`products.js`, `orders.js` — and cover the happy path plus the main error
+contracts (`400`, `401`, `404`, `409`). It needs no credentials: every run
+registers its own users and creates its own products.
 
 ```bash
-make sanity                                    # staging
+make sanity                                    # whole suite against staging
 make sanity SANITY_URL=http://localhost:8080   # any environment
+k6 run test/sanity/orders.js                   # a single area, standalone
 ```
 
 ## Postman collection
