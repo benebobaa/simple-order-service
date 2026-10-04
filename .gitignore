@@ -5,8 +5,8 @@ bin/
 
 # Environment files
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Test / coverage artifacts
 coverage.out
