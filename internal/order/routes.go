@@ -22,4 +22,5 @@ func RegisterRoutes(v1 *gin.RouterGroup, deps RoutesDeps) {
 	group.POST("", requireAuth, h.create)
 	group.GET("", requireAuth, h.list)
 	group.GET("/:id", requireAuth, h.get)
+	group.POST("/:id/cancel", requireAuth, h.cancel)
 }

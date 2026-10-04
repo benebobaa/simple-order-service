@@ -225,3 +225,95 @@ func (s *orderSuite) TestCreateOrder_ConcurrentReservationOfLastItem() {
 		s.Equal(round+1, countRows(s.T(), "orders"), "round %d: exactly one order row per round", round)
 	}
 }
+
+// TestCreateOrder_ConcurrentWithCancelOnSameProducts races new orders against
+// cancellations of existing orders that contain the same two products, with
+// mixed request order. Creates lock products in id order and cancels restore
+// them in product_id order, so the operations must interleave without
+// deadlocks and without losing a stock change: the final stock must equal the
+// initial stock minus the successful orders plus the completed restores.
+func (s *orderSuite) TestCreateOrder_ConcurrentWithCancelOnSameProducts() {
+
+	token := registerUser(s.T()).Token
+	first := createProduct(s.T(), token, map[string]any{"name": "Race A", "price": 1000, "stock": 10})
+	second := createProduct(s.T(), token, map[string]any{"name": "Race B", "price": 2000, "stock": 10})
+
+	const pendingOrders = 6
+	const newOrders = 8
+	const initialStock = int32(10)
+
+	orderIDs := make([]uuid.UUID, 0, pendingOrders)
+	for range pendingOrders {
+		rec := doJSON("POST", "/v1/orders", orderPayload(item(first.SKU, 1), item(second.SKU, 1)), token)
+		s.Require().Equal(201, rec.Code)
+		orderIDs = append(orderIDs, decodeData[orderapi.Response](s.T(), rec).ID)
+	}
+
+	start := make(chan struct{})
+	cancelCodes := make(chan int, pendingOrders)
+	createCodes := make(chan int, newOrders)
+	var wg sync.WaitGroup
+
+	for _, orderID := range orderIDs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			rec := doJSON("POST", "/v1/orders/"+orderID.String()+"/cancel", nil, token)
+			cancelCodes <- rec.Code
+		}()
+	}
+
+	for i := range newOrders {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			items := []map[string]any{item(first.SKU, 1), item(second.SKU, 1)}
+			if i%2 == 1 {
+				// Mixed request order stresses the lock ordering against the
+				// cancel restore order.
+				items = []map[string]any{item(second.SKU, 1), item(first.SKU, 1)}
+			}
+			rec := doJSON("POST", "/v1/orders", orderPayload(items...), token)
+			createCodes <- rec.Code
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+	close(cancelCodes)
+	close(createCodes)
+
+	cancelled := 0
+	for code := range cancelCodes {
+		s.Equal(200, code, "every first-time cancel must succeed")
+		if code == 200 {
+			cancelled++
+		}
+	}
+
+	created, conflicts := 0, 0
+	for code := range createCodes {
+		switch code {
+		case 201:
+			created++
+		case 409:
+			conflicts++
+		default:
+			s.Fail("unexpected create response code", "code", code)
+		}
+	}
+
+	s.Equal(pendingOrders, cancelled, "all pending orders must be cancelled")
+	s.Equal(newOrders, created+conflicts, "every new order must succeed or conflict cleanly")
+
+	// Each successful create removed one unit and each completed cancel
+	// restored one, for both products.
+	wantStock := initialStock - pendingOrders + int32(cancelled) - int32(created)
+	s.Equal(wantStock, getStock(s.T(), first.ID), "stock must balance for the first product")
+	s.Equal(wantStock, getStock(s.T(), second.ID), "stock must balance for the second product")
+
+	s.Equal(pendingOrders+created, countRows(s.T(), "orders"))
+	s.Equal(2*(pendingOrders+created), countRows(s.T(), "order_items"))
+}

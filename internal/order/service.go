@@ -199,6 +199,73 @@ func (s *Service) List(ctx context.Context, userID uuid.UUID, status *string, li
 	return orders, total, nil
 }
 
+// Cancel cancels a pending order and returns its reserved stock. Cancelling an
+// already-cancelled order is rejected with 409 ORDER_ALREADY_CANCELLED, and an
+// order that is not visible to the caller is reported as 404. The status
+// transition is guarded in the database (status = 'pending'), so even racing
+// cancels restore stock exactly once: exactly one request wins the transition,
+// the others conflict without touching stock. The response is built inside the
+// transaction, so a post-commit read failure cannot report a cancel as failed
+// after it was persisted.
+func (s *Service) Cancel(ctx context.Context, userID, orderID uuid.UUID) (*Detail, error) {
+	var detail *Detail
+	err := s.store.WithTx(ctx, func(q *sqlc.Queries) error {
+		cancelled, err := q.CancelOrder(ctx, sqlc.CancelOrderParams{ID: orderID, UserID: userID})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				// The guarded transition matched no row: either the order is
+				// not visible to this user (404), or it is already cancelled —
+				// status is constrained to pending/cancelled, so an existing
+				// row that failed the guard can only be cancelled.
+				_, getErr := q.GetOrderByIDForUser(ctx, sqlc.GetOrderByIDForUserParams{
+					ID:     orderID,
+					UserID: userID,
+				})
+				if getErr == nil {
+					return apperr.Conflict(apperr.CodeOrderAlreadyCancelled, "order is already cancelled", nil)
+				}
+				if !errors.Is(getErr, pgx.ErrNoRows) {
+					return fmt.Errorf("get order for cancel: %w", getErr)
+				}
+				return apperr.NotFound(apperr.CodeOrderNotFound, "order not found")
+			}
+			return fmt.Errorf("cancel order: %w", err)
+		}
+
+		items, err := q.ListOrderItemsByOrderID(ctx, orderID)
+		if err != nil {
+			return fmt.Errorf("list order items: %w", err)
+		}
+
+		for _, item := range items {
+			affected, err := q.IncreaseProductStock(ctx, sqlc.IncreaseProductStockParams{
+				ID:       item.ProductID,
+				Quantity: item.Quantity,
+			})
+			if err != nil {
+				return fmt.Errorf("restore stock: %w", err)
+			}
+			if affected != 1 {
+				return fmt.Errorf("restore stock: expected 1 row affected, got %d", affected)
+			}
+		}
+
+		// Build the response inside the transaction so a post-commit read
+		// failure can never report a cancel as failed after it was persisted.
+		rows, err := q.ListOrderItemsWithProductNameByOrderIDs(ctx, []uuid.UUID{orderID})
+		if err != nil {
+			return fmt.Errorf("list order items: %w", err)
+		}
+		detail = &Detail{Order: cancelled, Items: rows}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return detail, nil
+}
+
 func normalizeStatus(status *string) (*string, error) {
 	if status == nil || strings.TrimSpace(*status) == "" {
 		return nil, nil

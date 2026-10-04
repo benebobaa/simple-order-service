@@ -75,3 +75,17 @@ func (h *handler) list(c *gin.Context) {
 		Meta: web.ListMeta{Total: total, Limit: limit, Offset: offset},
 	})
 }
+
+func (h *handler) cancel(c *gin.Context) {
+	id, ok := web.ParseUUIDParam(c, "id")
+	if !ok {
+		return
+	}
+
+	detail, err := h.service.Cancel(c.Request.Context(), auth.UserIDFromContext(c), id)
+	if err != nil {
+		web.AbortWithError(c, err)
+		return
+	}
+	web.Respond(c, http.StatusOK, newResponse(detail))
+}
