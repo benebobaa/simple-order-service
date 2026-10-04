@@ -145,7 +145,8 @@ registers its own users and creates its own products.
 racing for the last unit and five parallel cancels of one order — failing on
 any outcome a correct implementation cannot produce. The deterministic race
 proofs live in `test/integration/`; the probe validates the deployed
-environment.
+environment. The race width defaults to five and is tunable:
+`k6 run -e RACERS=10 test/sanity/concurrency.js`.
 
 ```bash
 make sanity                                    # whole suite against staging
