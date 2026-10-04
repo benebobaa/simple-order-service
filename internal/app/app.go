@@ -2,6 +2,7 @@
 package app
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
@@ -22,7 +23,8 @@ func New(pool *pgxpool.Pool, cfg *config.Config, logger *slog.Logger) *gin.Engin
 	issuer := auth.NewJWTIssuer(cfg.JWTSecret, cfg.JWTTTL)
 
 	return httpapi.NewRouter(httpapi.Deps{
-		Logger: logger,
+		Logger:     logger,
+		ReadyCheck: func(ctx context.Context) error { return pool.Ping(ctx) },
 		Auth: auth.RoutesDeps{
 			Service:     auth.NewService(st, issuer),
 			TokenIssuer: issuer,

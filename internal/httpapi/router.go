@@ -2,8 +2,8 @@
 package httpapi
 
 import (
+	"context"
 	"log/slog"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 
@@ -15,10 +15,14 @@ import (
 
 // Deps carries the route dependencies for every feature module.
 type Deps struct {
-	Logger   *slog.Logger
-	Auth     auth.RoutesDeps
-	Products product.RoutesDeps
-	Orders   order.RoutesDeps
+	Logger *slog.Logger
+	// ReadyCheck reports whether the service can serve traffic (dependencies
+	// reachable). It is used by the /readyz probe. When nil the probe reports
+	// ready without checking dependencies.
+	ReadyCheck func(ctx context.Context) error
+	Auth       auth.RoutesDeps
+	Products   product.RoutesDeps
+	Orders     order.RoutesDeps
 }
 
 // NewRouter builds the gin engine, applies global middleware and mounts each
@@ -33,9 +37,8 @@ func NewRouter(deps Deps) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery(), web.RequestID(), web.RequestLogger(deps.Logger))
 
-	r.GET("/healthz", func(c *gin.Context) {
-		web.Respond(c, http.StatusOK, gin.H{"status": "ok"})
-	})
+	r.GET("/healthz", healthz)
+	r.GET("/readyz", readyz(deps.ReadyCheck, deps.Logger))
 
 	v1 := r.Group("/v1")
 	auth.RegisterRoutes(v1, deps.Auth)
